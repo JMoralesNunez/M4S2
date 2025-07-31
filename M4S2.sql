@@ -35,7 +35,7 @@ CREATE TABLE enrollments(
 	id_student INT,
 	id_course INT,
 	enroll_date DATE,
-	final_grade DECIMAL(1,1),
+	final_grade DECIMAL(2,1),
 	CHECK (final_grade BETWEEN 1.0 AND 5.0),
 	CONSTRAINT FK_ID_STUDENT
 		FOREIGN KEY (id_student) REFERENCES students(id_student)
@@ -46,6 +46,7 @@ CREATE TABLE enrollments(
 		ON DELETE CASCADE 
 		ON UPDATE CASCADE
 );
+
 
 INSERT INTO students (
     full_name, 
@@ -103,7 +104,7 @@ INSERT INTO enrollments (
 (5, 4, '2023-01-20', 4.7);
 
 
-
+-- ----------------------------Query Exersices ----------------------------------------------
 
 SELECT students.id_student, students.full_name, enrollments.final_grade FROM students
 JOIN enrollments ON students.id_student = enrollments.id_student
@@ -113,8 +114,150 @@ WHERE final_grade > (
 ORDER BY final_grade DESC;
 
 
-SELECT students.id_student, students.full_name, enrollment.id_enroll, 
+SELECT 
+    s.id_student,
+    s.full_name,
+    s.student_email,
+    e.id_enroll,
+    e.enroll_date,
+    e.final_grade,
+    c.course_name,
+    c.course_code,
+    c.credits,
+    c.semester
+FROM students s
+LEFT JOIN enrollments e ON s.id_student = e.id_student
+LEFT JOIN courses c ON e.id_course = c.id_course
+ORDER BY s.id_student, e.enroll_date;
+
+
+SELECT 
+    c.course_name,
+    c.course_code,
+    c.credits,
+    c.semester,
+    t.full_name AS teacher_name,
+    t.year_exp
+FROM courses c
+JOIN teachers t ON c.id_teacher = t.id_teacher
+WHERE t.year_exp > 5;
+
+
+SELECT 
+    c.course_name,
+    c.course_code,
+    AVG(e.final_grade) AS promedio_calificacion
+FROM courses c
+JOIN enrollments e ON c.id_course = e.id_course
+GROUP BY c.id_course, c.course_name, c.course_code
+ORDER BY promedio_calificacion DESC;
 
 
 
+SELECT 
+    s.id_student,
+    s.full_name,
+    COUNT(e.id_course) AS cantidad_cursos
+FROM students s
+JOIN enrollments e ON s.id_student = e.id_student
+GROUP BY s.id_student, s.full_name
+HAVING COUNT(e.id_course) > 1
+ORDER BY cantidad_cursos DESC;
 
+
+
+SELECT 
+    c.id_course,
+    c.course_name,
+    COUNT(e.id_student) AS cantidad_estudiantes
+FROM courses c
+JOIN enrollments e ON c.id_course = e.id_course
+GROUP BY c.id_course, c.course_name
+HAVING COUNT(e.id_student) >= 2
+ORDER BY cantidad_estudiantes DESC;
+
+
+ALTER TABLE students
+ADD COLUMN estado_academico VARCHAR(50);
+
+
+
+-- DELETE ON CASCADE --
+
+INSERT INTO teachers (
+    full_name,
+    college_email,
+    academic_department,
+    year_exp
+) VALUES
+('Manuel Ruiz', 'manuel.ruiz@ecci.edu', 'filosofia', 2);
+
+INSERT INTO courses (
+    course_name,
+    course_code,
+    credits,
+    semester,
+    id_teacher
+) VALUES
+('Filosofia I', 108, 3, 6, 5);
+
+
+DELETE FROM teachers
+WHERE id_teacher = 5;
+
+
+SELECT DISTINCT s.career
+FROM students s
+WHERE EXISTS (
+    SELECT 1
+    FROM enrollments e
+    JOIN courses c ON e.id_course = c.id_course
+    WHERE e.id_student = s.id_student
+      AND c.semester >= 2
+);
+
+
+CREATE VIEW vista_historial_academico AS
+SELECT 
+    s.full_name AS nombre_estudiante,
+    c.course_name AS nombre_curso,
+    t.full_name AS nombre_docente,
+    c.semester AS semestre,
+    e.final_grade AS calificacion_final
+FROM enrollments e
+JOIN students s ON e.id_student = s.id_student
+JOIN courses c ON e.id_course = c.id_course
+JOIN teachers t ON c.id_teacher = t.id_teacher;
+
+SELECT * FROM vista_historial_academico;
+
+
+-- Access Control
+
+CREATE ROLE IF NOT EXISTS revisor_academico;
+GRANT SELECT ON vista_historial_academico TO revisor_academico;
+
+
+-- Primero le damos accesos para quitarselos
+GRANT INSERT, UPDATE, DELETE ON enrollments TO revisor_academico;
+REVOKE INSERT, UPDATE, DELETE ON enrollments FROM revisor_academico;
+
+
+
+-- Control de acceso y transacciones
+
+BEGIN;
+
+UPDATE enrollments
+SET final_grade = 4.8
+WHERE id_enroll = 1;
+
+SAVEPOINT checkpoint;
+
+UPDATE enrollments
+SET final_grade = 3.9
+WHERE id_enroll = 2;
+
+ROLLBACK TO SAVEPOINT checkpoint;
+
+COMMIT;
